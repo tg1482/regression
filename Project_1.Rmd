@@ -1,0 +1,312 @@
+---
+title: "Simple Linear Regression Analysis"
+author: "Tanmay Gupta"
+date: "2/27/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## The Analysis of the Single Variable
+
+#### INTRODUCTION
+
+The dataset I will be analyzing today is a dataset of Toyota car prices with respect to various factors that may impact their price. The main purpose is to find a variable within the dataset and use the change in its value to associate with the change in the price of that car. Throughout my analysis, I will be using R packages which will be used for the visualizations, regression modeling, and data analysis. The dataset consists of 1436 rows and 42 predictor variables. Since the data has 42 predictor variables, I will first run an analysis to find which predictor is the best to conduct a simple regression analysis with. Following is the command to find the 2 best predictors for running our regression analysis with. The significant variables are indicated with a " * ". It also gives us a good idea of the way the predictors are distributed:
+
+```{r, echo = FALSE, warning=FALSE}
+
+pacman::p_load(dplyr, tidyverse, tidyr, modelr, broom, nycflights13, 
+               gridExtra, glmnet, caret, leaps, ggfortify,car)
+
+setwd("~/Desktop/Stats_Class")
+
+toy <- read.csv("Toyota.csv")
+
+
+toy.x <- toy %>% 
+  select(-No, -Model, -Mfg_Month, -Mfg_Year)
+
+toy.x$Age <- toy.x$Age_08_04
+
+toy.x <- toy.x %>% select(-Age_08_04)
+
+best_subset <- regsubsets(Price ~., data = toy.x, nvmax = 2)
+best_subset_summary <- summary(best_subset)
+
+```
+
+
+```{r toy1, echo = TRUE, warning=FALSE}
+best_subset_summary$outmat
+
+```
+
+Having conducted the regression subset analysis, I found that "Age" of the car is the best predictor of the car's price. 
+
+####REGRESSION MODEL BUILDING
+
+Having said that, we now begin to explore the relationship between Price and Age to see if there is any predictive power in the data which will help us to understand the pattern in the data. To do that, we first begin by plotting the values of Price and Age against each other in a scatter plot. 
+
+Here is the scatter plot of the two variables (Price and Age):
+
+```{r, echo = FALSE}
+ggplot(data = toy.x, aes(x = Age, y = Price)) + 
+  geom_point(size = .75) + theme_minimal() + labs(title = "Scatterplot of Price vs Age")
+
+model <- lm(Price ~ Age, data = toy.x)
+```
+
+
+There appears to be a strong linear relationship here between Price and Age, however, we can identify a couple of observations which seem to lie aloof of the general trend that runs through the dataset. 
+ 
+Having noted the linear relationship, following is the regression line that runs through the dataset points. 
+
+```{r, echo = FALSE}
+model_pred <- toy.x %>% data_grid(Price, Age) %>% 
+  add_predictions(model = model)
+
+ggplot() + 
+  geom_line(data = model_pred, aes(x = Age, y = pred)) +
+  geom_point(data = toy.x, aes(x = Age, y = Price), size = 3/4, alpha = 1/2) + 
+  theme_minimal() + labs(title = "Scatterplot of Price vs Age with Regression Line", y = "Price")
+
+```
+
+As noticed before, we can see that there are a considerable number of points that lie above and below the regression line. We will explore further whether they lie outside the prediction error interval in the coming few pages.
+
+In the regression model below, you will see that the regression equation created takes the following form:
+
+Price = 20294.06  -  170.93 * ( Age )
+
+Following is the output from the R console when called for the summary of the model:
+
+```{r}
+model <- lm(Price ~ Age, data = toy.x)
+summary(model)
+```
+
+The regression is strong, with an r2 of 76.8% and the F-statistic of 4758. We will, next, analyze through a Linear Hypothesis test whether the F-statistic is significant or not.
+
+```{r}
+linearHypothesis(model, c("Age = 0"))
+```
+
+With the p-value of the F-statistic being close to 0, we can confirm that there is strong evidence that the model is statistically significant. 
+
+Upon further analysis of the regression summary, we find that the intercept is meaningful, representing the predicted value of the car when the car is 0 months old. The slope coefficient associates a fall in price of $170.63 of a car as that car ages by 1 month.
+
+The following simple regression scatter plot displays the use of confidence intervals to show the accuracy of the estimate of the average Price for all members of the population for a given Age of the car. The prediction interval, in contrast, represents the accuracy of a prediction of the Price for a particular observation with a given Age value. 
+
+```{r, echo = FALSE}
+
+pred <- predict(model, newdata = toy.x, interval = "predict", level = 0.95)
+pred5 <- predict(model, newdata = toy.x, interval = "confidence", level = 0.95)
+pred<-cbind(toy.x, pred)
+pred5<-cbind(toy.x,pred5)
+
+
+ggplot() + 
+  geom_point(data = pred,aes(x = Age, y = Price), size = .75, alpha = 1/3) + 
+  geom_line(data = pred, aes(x = Age, y = upr), size = 0.4, col = "dark blue") +
+  geom_line(data = pred, aes(x = Age, y = lwr), size = 0.4, col = "dark blue") +
+  geom_line(data = pred5, aes(x = Age, y = upr), size = 0.4, col = "red") +
+  geom_line(data = pred5, aes(x = Age, y = lwr), size = 0.4, col = "red") +
+  theme_minimal() + 
+  labs(title = "Scatterplot of Price vs Age with Confidence and Prediction Intervals")
+```
+
+In this graph, we can see clearly see the difference between the confidence (red) and the prediction (dark blue) intervals for the regression model. We can observe that the confidence interval is much narrower than the prediction interval, primarily because of the fact that the prediction interval takes into account the innate variability of Price while the confidence interval only takes into account the variability in its prediction for (  ^0 +  ^1 * Age ) as an estimator for the ( 0 +  1 * Age). Upon further observation, we can notice that the confidence interval is at its narrowest in the middle of the data, while broader toward its tails, which emphasizes on how the model is best at predicting values in a certain range and loses its accuracy as the data becomes more extreme.
+
+For instance, if we were to take an example of a car with an age of 36 months (3 years), the following are the confidence and prediction intervals for that car:
+
+```{r, warnings = FALSE, echo = FALSE}
+data_new <- data.frame("Age" = 36)
+
+pred <- predict(model, newdata = data_new, interval = "confidence", level = 0.95)
+
+pred <- pred %>% data.frame()
+pred$Confidence_fit <- pred$fit
+pred$Confidence_lower <- pred$lwr
+pred$Confidence_upper <- pred$upr
+
+pred2 <- predict(model, newdata = data_new, interval = "prediction", level = 0.95)
+
+pred2 <- pred2 %>% data.frame()
+pred2$Pred_fit <- pred2$fit
+pred2$Pred_lower <- pred2$lwr
+pred2$Pred_upper <- pred2$upr
+
+pred<-pred %>% select(-fit, -lwr, -upr)
+pred2<-pred2 %>% select(-fit, -lwr, -upr)
+
+intervals <- cbind(pred, pred2)
+
+intervals$Fit <- intervals$Confidence_fit
+intervals <- intervals %>% select(-Confidence_fit)
+
+intervals <- intervals %>% select(Fit, Confidence_lower, Confidence_upper, Pred_lower, Pred_upper)
+```
+
+
+```{r}
+intervals
+```
+
+As we can see, the prediction interval (Prediction_lower, Prediction_upper) is remarkably broader than the confidence interval (Confidence_lower, Confidence_upper) for a given fitted value (Age = 36 months). 
+
+We will now explore the residual distribution through the data set. 
+
+```{r, echo = FALSE}
+autoplot(model) + theme_minimal()
+```
+
+Through the distribution of residuals, can notice that the data has a number of points which are unusual in their values. We know that these unusual residuals can have a major impact on the regression model fits, like the r2, F-statistic, and the t-statistic. This may be because of other factors that may affect a car's price such as its physical condition, color, fuel type etc. which are not explained by this simple regression model. 
+
+In the Normal Q-Q plot, we can also find non-linearity which serves as a visual aid for us to recognize when the residuals do not form a normal distribution, thereby showing that one of our prime assumptions that the residuals form a normal distribution is violated toward the tails. This tells us to create a new model which has a higher explanatory power and complies better with our assumptions.
+
+#### REGRESSION MODEL WITH FILTERED DATA
+
+Having said that, I will remove all points from the dataset which have a residual of more than 3000 and less than -3000. That will help us to get a better idea of the relation of the price with the age without the impact of unusual data points.
+
+Following is the graph of the filtered dataset, with the confidence and prediction intervals drawn through the dataset.
+
+```{r, echo = FALSE}
+res <- resid(model)
+res <- res %>% data.frame() 
+names(res)[1]<-paste("res")
+
+
+toy.x<-toy.x %>% cbind(res)
+toy.new <- toy.x %>%
+  filter(res<=3000 & res >=-3000)
+
+model1 <- lm(Price ~ Age, data = toy.new)
+
+pred <- predict(model1, newdata = toy.new, interval = "predict", level = 0.95)
+pred5 <- predict(model1, newdata = toy.new, interval = "confidence", level = 0.95)
+pred<-cbind(toy.new, pred)
+pred5<-cbind(toy.new,pred5)
+
+ggplot() + 
+  geom_point(data = pred,aes(x = Age, y = Price), size = .75, alpha = 1/3) + 
+  geom_line(data = pred, aes(x = Age, y = upr), size = 0.4, col = "dark blue") +
+  geom_line(data = pred, aes(x = Age, y = lwr), size = 0.4, col = "dark blue") +
+  geom_line(data = pred5, aes(x = Age, y = upr), size = 0.4, col = "red") +
+  geom_line(data = pred5, aes(x = Age, y = lwr), size = 0.4, col = "red") +
+  theme_minimal() + 
+  labs(title = "Scatterplot of Price vs Age with Confidence and Prediction Intervals",
+       subtitle = "Filtered Data")
+
+```
+
+From the first look at the graph, we can make out that a lot more data points lie within the prediction interval as from before the data was filtered. 
+This adds predictive power to the model, which can be confirmed through the new regression model that is created with the filtered dataset. 
+Following is the summary of the new regression model using the filtered data set:
+
+```{r}
+summary(model1)
+anova(model1)
+```
+
+We get a new model for the filtered data which is:
+
+Price = 19325.88  -  155.16 * ( Age )
+
+We can see that the r 2 has risen from 76.8% to 83.8%. We further analyze the ANOVA of the new model which gives us an F-statistic of 6925.2 and a p-value of 0. As the F-statistic increases, the less likely the observed difference is due to chance.  
+
+We will now explore the residual distribution of the new model. From the comparison below we can see that the filtered data has created a density graph which is less dispersed as compared to the previous model which gives us an idea of the better prediction power of the new model. We can observe that there are high scaled values of residuals in the unfiltered dataset which extends from -5 to 7.5 while in the case of filtered date, the new model makes predictions which give scaled residuals a little outside the interval of -2 and 2, and essentially follows a linear form. 
+
+
+```{r, echo = FALSE}
+toy.xz <- toy.x
+toy.z <- toy.new
+
+toy.xz$res <- toy.xz$res %>% scale()
+
+toy.z$res <- toy.new$res %>% scale()
+
+plot <- toy.xz %>% ggplot() + 
+  stat_qq(aes(sample = res), size = .5) + 
+  geom_vline(aes(xintercept = 2), linetype = 2) +
+  geom_vline(aes(xintercept = -2), linetype = 2) +
+  labs(title = "Density plot of residuals", x = "Theoretical Quantiles", y = "Residuals") +
+  theme_minimal()
+
+plot1 <- toy.z %>% ggplot() + 
+  stat_qq(aes(sample = res), size = .5) + 
+  geom_vline(aes(xintercept = 2), linetype = 2) +
+  geom_vline(aes(xintercept = -2), linetype = 2) +
+  labs(title = "Density plot of residuals", x = "Theoretical Quantiles", y = "Residuals") +
+  theme_minimal()
+
+grid.arrange(plot, plot1)
+
+```
+
+
+We will also compare the distribution of residuals to analyze the change after the data is filtered. 
+
+```{r, echo = FALSE, warning=FALSE}
+model_res <- toy.x %>% add_residuals(model = model)
+model_res1 <- toy.new %>% add_residuals(model = model1)
+
+plot2<- ggplot() + 
+  geom_histogram(data = model_res, aes(x = resid), bins = 100 ) + 
+  scale_x_continuous(limits = c(-10000, 14000)) + 
+  labs(title = "Histogram of Residuals", x = "Residual", y = "Frequency") +
+  theme_minimal()
+
+plot3<-ggplot() + 
+  geom_histogram(data = model_res1, aes(x = resid), bins = 100 ) + 
+  scale_x_continuous(limits = c(-10000, 14000)) + 
+  labs(title = "Histogram of Residuals (Filtered Data)", x = "Residual", y = "Frequency") +
+  theme_minimal()
+
+grid.arrange(plot2, plot3, nrow=2)
+```
+
+
+We will now conduct a test of the new model by taking a sample car of Age = 36 months and compare it with the result we obtained previously through the unfiltered data.
+
+```{r, echo = FALSE}
+dat <- data.frame("Age" = 36)
+
+pred1 <- predict(model1, newdata = dat, interval = "confidence", level = 0.95)
+
+pred1 <- pred1 %>% data.frame()
+pred1$Confidence_fit <- pred1$fit
+pred1$Confidence_lower <- pred1$lwr
+pred1$Confidence_upper <- pred1$upr
+
+pred3 <- predict(model1, newdata = dat, interval = "prediction", level = 0.95)
+
+pred3 <- pred3 %>% data.frame()
+pred3$Pred_fit <- pred3$fit
+pred3$Pred_lower <- pred3$lwr
+pred3$Pred_upper <- pred3$upr
+
+pred1<-pred1 %>% select(-fit, -lwr, -upr)
+pred3<-pred3 %>% select(-fit, -lwr, -upr)
+
+intervals <- cbind(pred1, pred3)
+
+intervals$Fit <- pred1$Confidence_fit
+intervals <- intervals %>% select(-Confidence_fit, -Pred_fit)
+
+intervals <- intervals %>% select(Fit, Confidence_lower, Confidence_upper, Pred_lower, Pred_upper)
+```
+
+```{r}
+intervals
+```
+
+We can see that the value provided by the prediction model is more precise, in the sense that the variability in its value in terms of the range is lower than the one provided by the previous model. 
+
+####CONCLUSION
+
+Thus, we can conclude that the relationship between the two variables, as shown through the model, has considerably increased, and the probability of making an error when rejecting the null hypothesis for the F-statistic has decreased. The claim that the decreasing price of a Toyota car can be associated to its increasing age can be backed by the evidence provided in this analysis. 
+
+Fundamentally, it can be attributed to the decreasing physical attractiveness of an older car, outdated technology, older features etc. Furthermore, aspects such as the condition of the car, fuel type etc. can be better analyzed through other predictor variables in the dataset which we have not explored in this simple linear regression model. If we were to include other statistically significant variables in our model, then we might find a model which might be able to explain its pricing better, which will help us understand the data outliers which we conveniently filtered out to create the new model. 
+

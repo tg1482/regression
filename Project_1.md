@@ -57,13 +57,13 @@ Having said that, we now begin to explore the relationship between Price and Age
 
 Here is the scatter plot of the two variables (Price and Age):
 
-![](Project_1_files/figure-markdown_github/unnamed-chunk-2-1.png)
+<img src="Project_1_files/figure-markdown_github/unnamed-chunk-2-1.png" style="display: block; margin: auto;" />
 
 There appears to be a strong linear relationship here between Price and Age, however, we can identify a couple of observations which seem to lie aloof of the general trend that runs through the dataset.
 
 Having noted the linear relationship, following is the regression line that runs through the dataset points.
 
-![](Project_1_files/figure-markdown_github/unnamed-chunk-3-1.png)
+<img src="Project_1_files/figure-markdown_github/unnamed-chunk-3-1.png" style="display: block; margin: auto;" />
 
 As noticed before, we can see that there are a considerable number of points that lie above and below the regression line. We will explore further whether they lie outside the prediction error interval in the coming few pages.
 
@@ -72,11 +72,6 @@ In the regression model below, you will see that the regression equation created
 Price = 20294.06 - 170.93 \* ( Age )
 
 Following is the output from the R console when called for the summary of the model:
-
-``` r
-model <- lm(Price ~ Age, data = toy.x)
-summary(model)
-```
 
     ## 
     ## Call:
@@ -99,10 +94,6 @@ summary(model)
 
 The regression is strong, with an r2 of 76.8% and the F-statistic of 4758. We will, next, analyze through a Linear Hypothesis test whether the F-statistic is significant or not.
 
-``` r
-linearHypothesis(model, c("Age = 0"))
-```
-
     ## Linear hypothesis test
     ## 
     ## Hypothesis:
@@ -123,15 +114,11 @@ Upon further analysis of the regression summary, we find that the intercept is m
 
 The following simple regression scatter plot displays the use of confidence intervals to show the accuracy of the estimate of the average Price for all members of the population for a given Age of the car. The prediction interval, in contrast, represents the accuracy of a prediction of the Price for a particular observation with a given Age value.
 
-![](Project_1_files/figure-markdown_github/unnamed-chunk-6-1.png)
+<img src="Project_1_files/figure-markdown_github/unnamed-chunk-6-1.png" style="display: block; margin: auto;" />
 
 In this graph, we can see clearly see the difference between the confidence (red) and the prediction (dark blue) intervals for the regression model. We can observe that the confidence interval is much narrower than the prediction interval, primarily because of the fact that the prediction interval takes into account the innate variability of Price while the confidence interval only takes into account the variability in its prediction for ( ^0 + ^1 \* Age ) as an estimator for the ( 0 + 1 \* Age). Upon further observation, we can notice that the confidence interval is at its narrowest in the middle of the data, while broader toward its tails, which emphasizes on how the model is best at predicting values in a certain range and loses its accuracy as the data becomes more extreme.
 
 For instance, if we were to take an example of a car with an age of 36 months (3 years), the following are the confidence and prediction intervals for that car:
-
-``` r
-intervals
-```
 
     ##        Fit Confidence_lower Confidence_upper Pred_lower Pred_upper
     ## 1 14140.45         14007.89         14273.01   10712.82   17568.08
@@ -140,7 +127,7 @@ As we can see, the prediction interval (Prediction\_lower, Prediction\_upper) is
 
 We will now explore the residual distribution through the data set.
 
-![](Project_1_files/figure-markdown_github/unnamed-chunk-9-1.png)
+<img src="Project_1_files/figure-markdown_github/unnamed-chunk-9-1.png" style="display: block; margin: auto;" />
 
 Through the distribution of residuals, can notice that the data has a number of points which are unusual in their values. We know that these unusual residuals can have a major impact on the regression model fits, like the r2, F-statistic, and the t-statistic. This may be because of other factors that may affect a car's price such as its physical condition, color, fuel type etc. which are not explained by this simple regression model.
 
@@ -152,13 +139,9 @@ Having said that, I will remove all points from the dataset which have a residua
 
 Following is the graph of the filtered dataset, with the confidence and prediction intervals drawn through the dataset.
 
-![](Project_1_files/figure-markdown_github/unnamed-chunk-10-1.png)
+<img src="Project_1_files/figure-markdown_github/unnamed-chunk-10-1.png" style="display: block; margin: auto;" />
 
 From the first look at the graph, we can make out that a lot more data points lie within the prediction interval as from before the data was filtered. This adds predictive power to the model, which can be confirmed through the new regression model that is created with the filtered dataset. Following is the summary of the new regression model using the filtered data set:
-
-``` r
-summary(model1)
-```
 
     ## 
     ## Call:
@@ -179,10 +162,6 @@ summary(model1)
     ## Multiple R-squared:  0.8382, Adjusted R-squared:  0.8381 
     ## F-statistic:  6925 on 1 and 1337 DF,  p-value: < 2.2e-16
 
-``` r
-anova(model1)
-```
-
     ## Analysis of Variance Table
     ## 
     ## Response: Price
@@ -200,17 +179,13 @@ We can see that the r 2 has risen from 76.8% to 83.8%. We further analyze the AN
 
 We will now explore the residual distribution of the new model. From the comparison below we can see that the filtered data has created a density graph which is less dispersed as compared to the previous model which gives us an idea of the better prediction power of the new model. We can observe that there are high scaled values of residuals in the unfiltered dataset which extends from -5 to 7.5 while in the case of filtered date, the new model makes predictions which give scaled residuals a little outside the interval of -2 and 2, and essentially follows a linear form.
 
-![](Project_1_files/figure-markdown_github/unnamed-chunk-12-1.png)
+<img src="Project_1_files/figure-markdown_github/unnamed-chunk-12-1.png" style="display: block; margin: auto;" />
 
 We will also compare the distribution of residuals to analyze the change after the data is filtered.
 
-![](Project_1_files/figure-markdown_github/unnamed-chunk-13-1.png)
+<img src="Project_1_files/figure-markdown_github/unnamed-chunk-13-1.png" style="display: block; margin: auto;" />
 
 We will now conduct a test of the new model by taking a sample car of Age = 36 months and compare it with the result we obtained previously through the unfiltered data.
-
-``` r
-intervals
-```
 
     ##        Fit Confidence_lower Confidence_upper Pred_lower Pred_upper
     ## 1 13740.03         13638.82         13841.24    11370.5   16109.56

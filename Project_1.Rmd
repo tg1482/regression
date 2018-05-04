@@ -6,7 +6,7 @@ output: github_document
 ---
 
 ```{r setup, include=FALSE, warning=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE, fig.width=5.5, fig.height=4, warning = FALSE, fig.align = "center", dpi=300)
 ```
 
 ## The Analysis of the Single Variable

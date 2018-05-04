@@ -2,7 +2,7 @@
 title: "Simple Linear Regression Analysis"
 author: "Tanmay Gupta"
 date: "2/27/2018"
-output: html_document
+output: github_document
 ---
 
 ```{r setup, include=FALSE, warning=FALSE}

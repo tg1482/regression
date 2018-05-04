@@ -2,12 +2,12 @@
 title: "Homework 3"
 author: "Tanmay Gupta"
 date: "3/12/2018"
-output: html_document
+output: github_document
 
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE, fig.width=5.5, fig.height=4, warning = FALSE, fig.align = "center", dpi=300)
+knitr::opts_chunk$set(echo = FALSE, fig.width=4.5, fig.height=3, warning = FALSE, fig.align = "center", dpi=300)
 ```
 
 ```{r, echo = FALSE, warning=FALSE}

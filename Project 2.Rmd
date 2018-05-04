@@ -1,0 +1,854 @@
+---
+title: "Homework 3"
+author: "Tanmay Gupta"
+date: "3/12/2018"
+output: html_document
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, fig.width=5.5, fig.height=4, warning = FALSE, fig.align = "center", dpi=300)
+```
+
+```{r, echo = FALSE, warning=FALSE}
+pacman::p_load(dplyr, tidyverse, modelr, gridExtra, caret, ggfortify, car, plotly)
+
+options(scipen=5)
+
+setwd("~/Desktop/Stats_Class")
+
+life_exp <- read.delim("healthy_life.csv", sep = ",", skip = 1)
+death <- read.delim("adult_mortality.csv", sep = ",", skip = 1)
+gdp_per <- read.fwf("GDP_per_capita_2004.txt", widths = c(4, 54, 1, 8), strip.white = TRUE,
+                    stringsAsFactors = FALSE)
+bmi <- read.fwf("bmi.txt", widths = c(53, 4), strip.white = TRUE, stringsAsFactors = FALSE, skip = 3)
+suicide <- read.delim("suicide_rate.csv", sep = ",", skip = 1)
+child_death <- read.fwf("child_mortality.txt", widths = c(53, 5, 4), strip.white = TRUE, 
+                        stringsAsFactors = FALSE)
+continents <- read.csv("continents.csv")
+
+life_exp <- life_exp %>% select(X, Both.sexes, Male, Female)
+
+names <- c("Country", "Life_Expectancy", "Life_exp_Male", "Life_exp_Female")
+names(life_exp) <- names
+
+names <- c("Country", "Year", "Mortality", "Mortality_Male", "Mortality_Female")
+names(death) <- names
+
+names <- c("No", "Country", "Buffer","GDP")
+names(gdp_per) <- names
+
+names <- c("Country", "BMI")
+names(bmi) <- names
+
+names <- c("Country", "Sex", "Suicide_rate")
+names(suicide) <- names
+
+names <- c("Country", "Year", "Child_Mortality")
+names(child_death) <- names
+
+life_exp <- life_exp %>% filter(Country != "Country") %>% select(Country, Life_Expectancy)
+death <- death %>% filter(Year == 2015) %>% select(Country, Mortality)
+gdp_per$GDP <-  as.numeric(gsub(",", "", gdp_per$GDP))
+gdp_per <- gdp_per %>% select(-No, -Buffer)
+bmi$BMI <- as.numeric(bmi$BMI)
+suicide <- suicide %>% select(-Sex)
+child_death <- child_death %>% select(-Year)
+continents <- continents %>% select(Country, Continent)
+
+data <- merge(life_exp, death, by = "Country")
+data <- merge(data, gdp_per, by = "Country")
+data <- merge(data, bmi, by = "Country")
+data <- merge(data, suicide, by = "Country")
+data <- merge(data, child_death, by = "Country")
+data <- merge(data, continents, by = "Country")
+data$Country <- as.character(data$Country)
+data$Mortality <- data$Mortality/1000
+data$Suicide_rate <- data$Suicide_rate/100000
+data$Child_Mortality <- data$Child_Mortality/1000
+data$GDP <- as.numeric(data$GDP)
+```
+
+## Introduction
+
+In this homework assignment I will explore data I collected from the World Health Oranization ("WHO" henceforth). The dataset has `r ncol(data)` columns and `r nrow(data)` rows. All data in this dataset are for the year 2015. Following are the explanations for each variable:
+
+* ***Both Sex Life Expectancy:*** Measures the average life expectancy for both sexes in a country. This will be the response variable in my regression analysis. 
+
+* ***Both Sex Mortality Rate:*** Measures the average rate of deaths for both sexes in a country. In essence, it measures the probablity of dying between the age of 15 and 60 years. This will be a predictor variable in my regression analysis. 
+
+* ***GDP Per Capita:*** Measures the per capita GDP for a country. This number is adjusted for purchasing power parity. This will be a predictor variable in my regression analysis.
+
+* ***Both Sex BMI:*** Measures the average body mass index (BMI) for the population in a country. It is weighted according to the population distrubution for a country. This will be a predictor variable in my regression analysis. 
+
+* ***Suicide Rate:*** Measures the rate of suicides for a country. I'll be using this as a proxy for mental health in the country. This will be a predictor variable in my regression analysis.
+
+* ***Child Mortality Rate:*** Measures the rate of children who die under the age of 1 years for a country. This will be a predictor variable in my regression analysis.
+
+* ***Continent:*** Indicates the continent the country is a part of. This will be a predictor in my regression analysis. 
+
+Following are the first few rows of the dataset to give a general idea of the data I will be working with.
+
+```{r}
+head(data)
+```
+
+## Data Exploration
+
+#### GDP per Capita
+
+We will immediately begin exploring the data and general trends that are prevalent.
+
+```{r}
+data %>% 
+  ggplot() + 
+  geom_point(aes(y = Life_Expectancy, x = GDP, colour = Continent)) + 
+  labs(title = "GDP per Capita vs Life Expectancy", y = "Life Expectancy", x = "GDP per Capita") +
+  scale_x_continuous(labels = scales::dollar) +
+  theme_minimal()
+```
+
+Since we can see that the values are fanning out towards the right side, we can suspect that since the **GDP per Capita** value is a monetary value, we may have to transform that into its log scale.
+
+Before converting the **GDP per Capita** value into a *log* scaled value, I will check whether it's histogram distribution has a long right tail.
+
+```{r}
+data %>% 
+  ggplot() + 
+  geom_histogram(aes(GDP), bins = 25) + 
+  labs(title = "Histogram of GDP per Capita", x = "GDP per capita", y = "Frequency") + 
+  scale_x_continuous(labels = scales::dollar) +
+  theme_minimal()
+  
+```
+
+As expected, the histogram of **GDP per Capita** shows a long right tail. We will now transform this to its *log* scale and display the scatter plot again. 
+
+```{r}
+data %>% 
+  ggplot() + 
+  geom_point(aes(y = Life_Expectancy, x = GDP, colour = Continent)) + 
+  labs(title = "log(GDP per Capita) vs Life Expectancy", y = "Life Expectancy", x = "log(GDP per Capita)") +
+  scale_x_log10() +
+  theme_minimal()
+```
+
+This provides a much cleaner and straighter scatter plot distribution for the two variables, which is why we will be using the *log* scale for **GDP per Capita** in our regression model.
+
+
+#### Mortality Rate
+
+Next, we will explore the relationship displayed between the **Mortality rate** and **Life Expectancy** through a scatter plot.
+
+
+```{r}
+data %>% 
+  ggplot() + 
+  geom_point(aes(y = Life_Expectancy, x = Mortality, colour = Continent)) + 
+  labs(title = "Mortality Rate vs Life Expectancy", y = "Life Expectancy", x = "Mortality") +
+  scale_x_continuous(labels = scales::percent) +
+  theme_minimal()
+```
+
+As we can see, there is a strong relationship between the **Mortality rate** and **Life Expectancy** for a given country. 
+
+
+#### Body Mass Index (BMI)
+
+In this section, we will explore the relationship prevalent between **BMI** and **Life Expectancy**. The **BMI** is an attempt to quantify the amount of tissue mass (muscle, fat, and bone) present in the body of an individual. Using this, we can categorize them as *under-weight*, *normal*, *over-weight*, or *obese*. 
+
+Following is the scatter plot:
+
+```{r}
+data %>% 
+  ggplot() + 
+  geom_point(aes(y = Life_Expectancy, x = BMI, colour = Continent)) + 
+  labs(title = "BMI vs Life Expectancy", y = "Life Expectancy", x = "BMI") +
+  theme_minimal()
+```
+
+We can see that the **Continent** plays a determining role in the scatter plot. This scatter plot also shows that the values for **BMI** fan out as the **Life Expectancy** increases. We can explore this further by checking the histogram distribution of **BMI**. 
+
+```{r}
+data %>% 
+  ggplot() + 
+  geom_histogram(aes(BMI), bins = 20) + 
+  labs(title = "Histogram of BMI", x = "BMI", y = "Frequency") + 
+  theme_minimal()
+```
+
+We can see that **BMI** does not have a long right tail, nor is it a monetary value, which is why there should be no need to use the *log* scale for this. 
+
+
+#### Suicide Rate
+
+We will now explore the relationship that exists between **Suicide Rate** and **Life Expectancy** through a scatter plot.
+
+```{r}
+data %>% 
+  ggplot() + 
+  geom_point(aes(y= Life_Expectancy, x = Suicide_rate, colour = Continent)) + 
+  labs(title = "Suicide Rate vs Life Expectancy", y = "Life Expectancy", x = "Suicide Rate") +
+  scale_x_continuous(labels = scales::percent) +
+  theme_minimal()
+```
+
+Its hard to find a distinct pattern in this scatter plot, but we can see that **Continent** plays a determining role in the **Suicide Rate**. 
+
+
+#### Child Mortality
+
+Lastly, we will now explore the relationship between **Child Mortality Rate** and **Life Expectancy**. 
+
+```{r}
+data %>% 
+  ggplot() + 
+  geom_point(aes(y = Life_Expectancy, x = Child_Mortality, colour = Continent)) + 
+  labs(title = "Child Mortality vs Life Expectancy", y = "Life Expectancy", x = "Child Mortality") + 
+  scale_x_continuous(labels = scales::percent) + 
+  theme_minimal()
+```
+
+We can see a strong relationship between **Child Mortality** and **Life Expectancy**. 
+
+## Regression Model
+
+Now that we know what sort of a relationship is prevalent in the data between the predictors and the response variables individually, we can now begin the process of model creation. 
+
+Since we have more than one variable, we will begin by creating a multiple regression model. The model takes the following form:
+
+$$ y_{i} = \beta_{0} + \beta_{1}*log(GDP)_{i} + \beta_{2}*BMI_{i} + \beta_{3}*Child Mortality_{i} + \beta_{4}*Mortality_{i} + \beta_{5}*Continent_{i} + \beta_{6}*Suicide Rate_{i} + \epsilon_{i} $$
+
+## Model 1
+
+```{r}
+
+dummy.vars <- dummyVars(Life_Expectancy ~ 1 + log(GDP) + BMI + Child_Mortality + Mortality + Continent +
+                          Suicide_rate, data = data)
+
+data.new <- predict(dummy.vars, data)
+data.new <- data %>% select(Life_Expectancy) %>% cbind(data.new)
+
+model <- lm(Life_Expectancy ~., data = data.new)
+fit <- predict(model, newdata = data.new)
+summary(model)
+```
+
+This model gives us the following equation:
+
+$$ Life Expectancy = 69.90 + 0.738*log(GDP) - 0.1424*BMI - 117.61*Child Mortality - 41.584*Mortality -1.07*Asia + 0.26*Europe + 0.144*North America + 0.82*Oceania - 1.54*Africa + 773.98*Suicide Rate $$
+
+The regression is extremely strong in our case, with an $R^{2}$ of 97.2% and *F* statistic of 560.8. Next we will interpret the meaning of the coefficients in the model.
+
+#### Meaning of Coefficients in the regression model
+
+* The **intercept** in this equation means that for any South American country with *log*(GDP per Capita of 0), ie. GDP per Capita = 1, Child Mortality = 0%, Mortality = 0%, Suicide rate = 0%, and BMI = 0, the Life Expectancy would be close to 69.9. It has a *p*-value close to 0, which means it is statistically significant. 
+
+* **log(GDP)** in this equation shows that with an increase in GDP per Capita by 1%, the impact on Life Expectancy would be close to 3.05%. 
+
+* **BMI** shows that an increase in BMI score by 1 would result in decrease of Life Expectancy by 0.1424 years and vice-versa.
+
+* **Child Mortality** shows that an increase in the percentage of Child Mortality rate by 1 would result in a corresponding decrease in Life Expectancy by 1.176 years.
+
+* **Mortality** shows that a increase in the percentage of Mortality rate by 1 would result in a decrease in Life Expectancy by 0.416 years.
+
+* **Asia** shows that if the country is in Asia, then the Life Expectancy would fall by 1.07 years.
+
+* **Europe** shows that if the country is in Europe, the Life Expectancy would increase by 0.26 years.
+
+* **North America** shows that if the country is in North America, the Life Expectancy would increase by 0.14 years.
+
+* **Oceania** shows that if the country is in Oceania, the Life Expectancy would increase by 0.82 years.
+
+* **South America** is NA because it's value is being represented through the intercept, that is when all other predictors are 0. 
+
+* **Africa** shows that if the country is in Africa, then the Life Expectancy would fall by 1.54 years.
+
+* **Suicide Rate** shows that if the percentage of suicide rate increases by 1, the Life Expectancy would increase by 7.74 years. 
+
+## Regression Diagnostics
+
+We will now begin the diagnosis of our regression model. 
+
+* We will first begin by examining those conditions that can cause an outright numeric error, which may cause an unstable system of equations. **Multicolinearity** is one such issue.
+
+* Next, we will explore whether our output reflects most of what the data has to offer, or whether its being influenced by a small number of data points. We will check this by examining the presence of *outliers* and *leverage points*. 
+
+#### Multicolinearily
+
+We will now explore the Multicollinearity present in the model. 
+
+Following is the correlation matrix for the variables in the model.
+
+```{r, echo=FALSE}
+data.cor <- data %>% select(-Continent, -Country)
+round(cor(data.cor, use = "complete.obs"), 5)
+```
+
+In this, we can see that **Mortality** and **Child Mortality** have an extremely high correlation of 86.99% with each other. **Mortality** has a high correlation of -95.45% with **Life Expectancy** while **Child Mortality** has a lower correlation of -93.93%. 
+
+We will further explore the VIF scores of each of these variables.
+
+```{r, echo=FALSE}
+data1 <- data %>% select(-Country)
+model.vif <- lm(Life_Expectancy ~., data = data1)
+vif(model.vif)
+```
+
+We can see that the GVIF scores for all variables are well below the danger territory which was max{$10,\frac{1}{1-R^2_{Model}}$}, which in our case would be max{$10,35.6$}. This indicates that although there is high correlation between the predictors, they are more correlated to the response variable than they are to each other. Having said that, I will leave them in the model for now.
+
+#### Residuals, Leverage, and Cooks Distance
+
+##### Residuals
+
+We will first begin by studying the Standardized Residuals in the model.
+
+```{r}
+
+res <- resid(model)
+res <- (res - mean(res))/sd(res)
+res <- res %>% as.data.frame()
+res$ID <- seq.int(nrow(res))
+names(res) <- c("Res", "ID")
+
+res %>% 
+  ggplot() + 
+  geom_point(aes(x = ID, y = Res)) + 
+  labs(title = "Standardized Residuals", y = "Standardized Residuals", x = "Index") + 
+  geom_hline(yintercept = 2.5, linetype = 2) +
+  geom_hline(yintercept = -2.5, linetype = 2) +
+  theme_minimal()
+```
+
+
+We can see that there are around 9 points with high standardized residuals with index numbers 4, 12, 26, 29, 75, 78, 83, 87 and 135.
+
+Following is the data for them:
+
+*Outliers*
+
+```{r}
+data.res <- rbind(data[4,],
+      data[12,],
+      data[26,],
+      data[29,],
+      data[75,],
+      data[78,],
+      data[83,],
+      data[87,],
+      data[135,] )
+
+data.res
+```
+
+
+To give an idea of their distribution, the points in **dark blue** are the outliers in the following graph. They may not necessarily look like outliers as I will only display them in one scatter plot which may not be representative of those predictor variables that make them an outlier. 
+
+```{r}
+data %>% 
+  ggplot() + 
+  geom_point(aes(y = Life_Expectancy, x = Child_Mortality, colour = Continent)) + 
+  geom_point(aes(y= Life_Expectancy, x = Child_Mortality), data = data.res, size = 3, colour = "dark blue") +
+  labs(title = "Child Mortality vs Life Expectancy", y = "Life Expectancy", x = "Child Mortality") +
+  scale_x_continuous(labels = scales::percent) +
+  theme_minimal()
+```
+
+
+##### Leverage
+
+Now we will study the leverage points within our model.
+
+The average leverage in the model should be close to $(\frac{p + 1}{n})$ where *p* is the number of predictors and *n* is the number of rows. Having said that, the average leverage would be close to 0.0636. We know a point has high leverage when the leverage value is 2.5*$(\frac{p + 1}{n})$ which, in our case, would be greater than .1589
+
+```{r}
+lev <- hat(model.matrix(model))
+lev <- lev %>% as.data.frame()
+lev$ID <- seq.int(nrow(lev))
+names(lev) <- c("Lev", "ID")
+
+lev %>% 
+  ggplot() + 
+  geom_point(aes(x = ID, y = Lev)) + 
+  labs(title = "Leverage Points", y = "Leverage", x = "Index") + 
+  geom_hline(yintercept = .1589, linetype = 2) +
+  theme_minimal()
+```
+
+The points that lie above the .1589 line are the following index values: 8, 48, 82, 87, 119, 121, 146
+
+Following are the high leverage points:
+
+*Leverage Points*
+
+```{r}
+data.lev <- rbind(data[87,],
+      data[82,],
+      data[119,],
+      data[121,],
+      data[146,],
+      data[48,],
+      data[8,])
+
+data.lev
+```
+
+```{r}
+data %>% 
+  ggplot() + 
+  geom_point(aes(y = Life_Expectancy, x = Suicide_rate, colour = Continent)) + 
+  geom_point(aes(y = Life_Expectancy, x = Suicide_rate), data = data.lev, size = 3, colour = "dark blue") +
+  labs(title = "Suicide Rate vs Life Expectancy", y = "Life Expectancy", x = "Suicide Rate") +
+  scale_x_continuous(labels = scales::percent) +
+  theme_minimal()
+
+```
+
+##### Cook's Distance
+
+At last, we will explore the Cook's Distance for the model. We know that the Cook's Distance (Denoted by $D_{i}$) is an appealing way of combining the notions of Outlyingness and Leverage. 
+
+Following is the formula for Cook's Distance:
+
+$$D_{i} = \frac{(e^*_{i})h_{ii}}{(p+1)(1-h_{ii})}$$
+```{r}
+cd <- cooks.distance(model)
+cd <- cd %>% as.data.frame()
+cd$ID <- seq.int(nrow(cd))
+names(cd) <- c("Lev", "ID")
+
+cd %>% 
+  ggplot() + 
+  geom_point(aes(x = ID, y = Lev)) + 
+  labs(title = "Cook's Distance", y = "Cook's Distance", x = "Index") + 
+  geom_hline(yintercept = 1, linetype = 2) +
+  theme_minimal()
+```
+
+Since in this case, all the points show a Cook's Distance of less than 1, we will not remove any points on the basis of their Cook's Distance. 
+
+## Model 2
+
+Before anything else, we will first begin by filtering the data so as to remove the outlying points and those that had high leverage over the model. 
+
+```{r}
+data.fil <- data %>% filter(Country != "Pakistan" , Country != "Lesotho" , Country!="Kiribati" , Country != "Papua New Guinea" , Country != "Spain" , Country != "Equatorial Geunea" , Country != "Australia", Country != "Angola", Country != "Bahrain", Country != "Cambodia", Country != "Central African Republic", Country != "Israel", Country != "Japan", Country != "Kuwait", Country != "Lesotho", Country != "Saudi Arabia")
+```
+
+Our filtered data now has `r nrow(data.fil)` rows. We will now create a new model with these points.
+
+```{r}
+dummy.vars <- dummyVars(Life_Expectancy ~ 1 + log(GDP) + BMI + Child_Mortality + Continent + Mortality +
+                          Suicide_rate, data = data.fil)
+
+data.new <- predict(dummy.vars, data.fil)
+data.new <- data.fil %>% select(Life_Expectancy) %>% cbind(data.new)
+
+model <- lm(Life_Expectancy ~., data = data.new)
+fit <- predict(model, newdata = data.new)
+summary(model)
+```
+
+This model gives us a higher value for both, the $R^2$: 98.37% and the *F*-statistic: 892.9.
+
+We now get the following regression equation:
+
+$$ Life Expectancy = 69.63 + 0.755*log(GDP) - 0.1317*BMI - 118.32*Child Mortality - 43.79*Mortality -0.84*Asia + 0.15*Europe + 0.203*North America + 0.944*Oceania - 1.25*Africa + 1909.55*Suicide Rate $$
+
+The interpretations for these coefficients remain similar to the previous, with a change in magnitude of impact for each.
+
+## Regression Diagnostics
+
+#### Multicolinearily
+
+We will now explore the Multicollinearity present in the model. 
+
+Following is the correlation matrix for the variables in the model.
+
+```{r, echo=FALSE}
+data.cor <- data.fil %>% select(-Continent, -Country)
+round(cor(data.cor, use = "complete.obs"), 5)
+```
+
+In this, we can see that **Mortality** and **Child Mortality** have a similar high correlation of 86.54% with each other as in the previous model. **Mortality** has a high correlation of -96.1% with **Life Expectancy** while **Child Mortality** has a lower correlation of -94.32%. 
+
+We will further explore the VIF scores of each of these variables.
+
+```{r, echo=FALSE}
+data1 <- data.fil %>% select(-Country)
+model.vif <- lm(Life_Expectancy ~., data = data1)
+vif(model.vif)
+```
+
+We can see that the GVIF scores for all variables are again well below the danger territory which in our case would be max{$10,61.65$}. This indicates that although there is high correlation between the predictors, they are more correlated to the response variable than they are to each other. Having said that, I will leave them in the model for now.
+
+We can make an inference that Multicollinearity won't play any major part in impacting the regression model that we created. For that reason, we won't examine for Multicollinearity any further.
+
+#### Residuals, Leverage, and Cooks Distance
+
+##### Residuals
+
+We will first begin by studying the Standardized Residuals in the model.
+
+```{r}
+res <- resid(model)
+res <- (res - mean(res))/sd(res)
+res <- res %>% as.data.frame()
+res$ID <- seq.int(nrow(res))
+names(res) <- c("Res", "ID")
+
+res %>% 
+  ggplot() + 
+  geom_point(aes(x = ID, y = Res)) + 
+  labs(title = "Standardized Residuals", y = "Standardized Residuals", x = "Index") + 
+  geom_hline(yintercept = 2.5, linetype = 2) +
+  geom_hline(yintercept = -2.5, linetype = 2) +
+  theme_minimal()
+```
+
+We can see that there are around 2 points with high standardized residuals with index numbers 115 and 138.
+
+Following is the data for them:
+
+*Outliers*
+
+```{r}
+data.res <- rbind(data[115,],
+                  data[138,])
+data.res
+```
+
+
+```{r}
+data.fil %>% 
+  ggplot() + 
+  geom_point(aes(y = Life_Expectancy, x = log(GDP), colour = Continent)) + 
+  geom_point(aes(y = Life_Expectancy, x = log(GDP)), data = data.res, size = 3, colour = "dark blue") +
+  labs(title = "log(GDP) vs Life Expectancy", x = "log(GDP)", y = "Life Expectancy") +
+  theme_minimal()
+```
+
+##### Leverage
+
+Checing for leverage points. 
+
+The average leverage would be close to 0.0692. We know a point has high leverage when the leverage value is 2.5*$(\frac{p + 1}{n})$ which, in our case, would be greater than 0.1725
+
+```{r}
+lev <- hat(model.matrix(model))
+lev <- lev %>% as.data.frame()
+lev$ID <- seq.int(nrow(lev))
+names(lev) <- c("Lev", "ID")
+
+lev %>% 
+  ggplot() + 
+  geom_point(aes(x = ID, y = Lev)) + 
+  labs(title = "Leverage Points", y = "Leverage", x = "Index") + 
+  geom_hline(yintercept = .1725, linetype = 2) +
+  theme_minimal()
+```
+
+The points that lie above the 0.1725 line are the following index values: 43, 47, 101, 121, 132, 142
+
+Following are the high leverage points:
+
+*Leverage Points*
+
+```{r}
+data.lev <- rbind(data[43,],
+      data[47,],
+      data[101,],
+      data[121,],
+      data[132,],
+      data[142,])
+
+data.lev
+```
+
+```{r}
+data.fil %>% 
+  ggplot() + 
+  geom_point(aes(y = Life_Expectancy, x = Suicide_rate, colour = Continent)) + 
+  geom_point(aes(y = Life_Expectancy, x = Suicide_rate), data = data.lev, size = 3, colour = "dark blue") +
+  labs(title = "Suicide Rate vs Life Expectancy", y = "Life Expectancy", x = "Suicide Rate") +
+  scale_x_continuous(labels = scales::percent) +
+  theme_minimal()
+```
+
+##### Cook's Distance
+
+At last, we will explore the Cook's Distance for the new model. We know that the Cook's Distance (Denoted by $D_{i}$) is an appealing way of combining the notions of Outlyingness and Leverage. 
+
+```{r}
+cd <- cooks.distance(model)
+cd <- cd %>% as.data.frame()
+cd$ID <- seq.int(nrow(cd))
+names(cd) <- c("Lev", "ID")
+cd %>% 
+  ggplot() + 
+  geom_point(aes(x = ID, y = Lev)) + 
+  labs(title = "Cook's Distance", y = "Cook's Distance", x = "Index") + 
+  geom_hline(yintercept = 1, linetype = 2) +
+  theme_minimal()
+```
+
+This is good news, as there are again no points with high Cook's Distance. 
+
+We will can now re-filter the data and begin with Residual Analysis and Model Selection.
+
+## Model 3
+
+```{r}
+data.fil <- data.fil %>% filter(Country != "El Salvador" , Country != "Dominican Republic" , Country!="Mexico" , Country != "Papua New Guinea" , Country != "Saint Vincent and the Grenadines" , Country != "Slovenia" , Country != "Seychelles", Country != "North Korea")
+```
+
+Our filtered data now has `r nrow(data.fil)` rows. We will now create a new model with these points.
+
+```{r}
+dummy.vars <- dummyVars(Life_Expectancy ~ 1 + log(GDP) + BMI + Child_Mortality + Continent + Mortality +
+                          Suicide_rate, data = data.fil)
+
+data.new <- predict(dummy.vars, data.fil)
+data.new <- data.fil %>% select(Life_Expectancy) %>% cbind(data.new)
+
+model <- lm(Life_Expectancy ~., data = data.new)
+fit <- predict(model, newdata = data.new)
+summary(model)
+```
+
+This model gives us a higher value for $R^2$: 98.43% but a lower value for the *F*-statistic: 876.3.
+
+We now get the following regression equation:
+
+$$ Life Expectancy = 70.20 + 0.699*log(GDP) - 0.132*BMI - 119.48*Child Mortality - 43.88*Mortality -0.81*Asia + 0.178*Europe + 0.120*North America + 0.911*Oceania - 1.318*Africa + 2114.7*Suicide Rate $$
+
+As we can see, the *p*-value of Suicide Rate, North America, and Europe are high. For that reason I will remove these predictors and re-create a new model. I will then compare the new model with this current model (model 3).
+
+## Model 4
+
+```{r}
+dummy.vars <- dummyVars(Life_Expectancy ~ log(GDP) + BMI + Child_Mortality + Continent + Mortality + Suicide_rate, data = data.fil)
+
+data.new <- predict(dummy.vars, data.fil)
+data.new <- data.fil %>% select(Life_Expectancy) %>% cbind(data.new)
+
+data.new <- data.new %>% select(-Continent.Europe, -`Continent.North America`, -Suicide_rate)
+
+model1 <- lm(Life_Expectancy ~ 1 + `log(GDP)` + BMI + Child_Mortality + Continent.Africa + Continent.Asia + Continent.Oceania + Mortality + `Continent.South America`, data = data.new)
+fit <- predict(model1, newdata = data.new)
+summary(model1)
+```
+
+This model gives us a similar value for $R^2$: 98.4% but much higher *F*-statistic: 1094
+
+We now get the following regression equation:
+
+$$ Life Expectancy = 70.46 + 0.76*log(GDP) - 0.158*BMI - 121.14*Child Mortality - 42.45*Mortality -1.03*Asia + 0.844*Oceania - 1.53*Africa -0.0845*South America $$
+
+We can see however that the *p*-values for South America, Oceania, and BMI are high. For that reason, I will remove them from the model and re-create a newer one. 
+
+# Model 5
+
+```{r}
+dummy.vars <- dummyVars(Life_Expectancy ~ log(GDP) + BMI + Child_Mortality + Continent + Mortality + Suicide_rate, data = data.fil)
+
+data.new <- predict(dummy.vars, data.fil)
+data.new <- data.fil %>% select(Life_Expectancy) %>% cbind(data.new) %>% na.omit()
+
+data.new <- data.new %>% select(-Continent.Europe, -`Continent.North America`, -Suicide_rate)
+
+model2 <- lm(Life_Expectancy ~ 1 + `log(GDP)` + Child_Mortality + Continent.Africa + Continent.Asia + Mortality, data = data.new)
+fit <- predict(model2, newdata = data.new)
+summary(model2)
+```
+
+#### Partial F-test for Model 4 and Model 5
+
+We will now construct a partial *F* test for model 4 and model 4 to check whether our simpler model (model 5) is better than the one which is more complicated (model 4).
+
+
+```{r}
+anova(model2, model1)
+```
+
+The *F*-statistic of the test is 3.1074 and the tail probability is 0.02864. This indicates that our simpler model is statistically different from the previous model. With an $R^2$ of 98.27% and an *F*-statistic of 1951, our newer model is much simpler without losing much of $R^2$. 
+
+#### Residual Plot
+
+```{r, fig, fig.width=7.5, fig.height=6}
+autoplot(model2, label.vjust = 1.5) + theme_minimal()
+```
+
+We can now see that there are 3 other points that may potentially influence the regression model - 110, 120, 88 
+
+Following are the rows:
+
+```{r}
+data.rm <- rbind(data.fil[110,],
+                 data.fil[120,],
+                 data.fil[88,])
+
+data.rm
+```
+
+We will now filter the data accordingly and then re-create the model.
+
+```{r}
+data.fil <- data.fil %>% filter(Country != "Qatar", Country != "Singapore", Country != "Mauritius")
+```
+
+## Model 6
+
+After filtering the dataset yet again, our dataset now has `r nrow(data.fil)` rows. 
+
+```{r}
+dummy.vars <- dummyVars(Life_Expectancy ~ log(GDP) + BMI + Child_Mortality + Continent + Mortality + Suicide_rate, data = data.fil)
+
+data.new <- predict(dummy.vars, data.fil)
+data.new <- data.fil %>% select(Life_Expectancy) %>% cbind(data.new)
+
+data.new <- data.new %>% select(-Continent.Europe, -`Continent.North America`, -Suicide_rate, -`Continent.South America`)
+
+model3 <- lm(Life_Expectancy ~ 1 + `log(GDP)` + Child_Mortality + Continent.Africa + Continent.Asia + Mortality, data = data.new)
+fit <- predict(model3, newdata = data.new)
+summary(model3)
+```
+
+We can see that the $R^2$ has increased to 98.53% and the *F*-statistic has also risen to 1913. 
+
+Before anything else, we will conduct a quick residual analysis.
+
+#### Residual Analysis
+
+```{r, fig1, fig.width=7.5, fig.height=6}
+autoplot(model3, label.vjust = 1.5) + theme_minimal()
+```
+
+We can now see that there are 3 other points that may potentially influence the regression model - 14, 47, 75 
+
+Following are the rows:
+
+```{r}
+data.rm <- rbind(data.fil[47,],
+                 data.fil[75,],
+                 data.fil[14,])
+data.rm
+```
+
+We will now remove them and create our new model. 
+
+```{r}
+data.fil <- data.fil %>% filter(Country != "Lebanon", Country != "France", Country != "Belize")
+```
+
+## Model 7
+
+After filtering the dataset yet again, our dataset now has `r nrow(data.fil)` rows. 
+
+```{r}
+dummy.vars <- dummyVars(Life_Expectancy ~ log(GDP) + BMI + Child_Mortality + Continent + Mortality + Suicide_rate, data = data.fil)
+
+data.new <- predict(dummy.vars, data.fil)
+data.new <- data.fil %>% select(Life_Expectancy) %>% cbind(data.new)
+
+data.new <- data.new %>% select(-Continent.Europe, -`Continent.North America`, -Suicide_rate, -`Continent.South America`)
+
+model4 <- lm(Life_Expectancy ~ 1 + `log(GDP)` + Child_Mortality + 
+               Continent.Africa + Continent.Asia + Mortality, data = data.new)
+fit <- predict(model4, newdata = data.new)
+summary(model4)
+```
+
+Our model's *F*-statistic has further increased to 2113 and our $R^2$ value is now 98.69%. We will now do a quick residual plot analysis. 
+
+#### Residual Plot
+
+```{r, fig2, fig.width=7.5, fig.height=6}
+autoplot(model4, label.vjust = 1.5) + theme_minimal()
+```
+
+We can now see that there are 2 other points that may potentially influence the regression model - 64, 143
+
+Following are the rows:
+
+```{r}
+data.rm <- rbind(data.fil[64,],
+                 data.fil[143,])
+data.rm
+```
+
+We will now remove them and create our new model. 
+
+```{r}
+data.fil <- data.fil %>% filter(Country != "Iraq", Country != "France", Country != "Vietnam")
+```
+
+
+## Model 8
+
+After filtering the dataset yet again, our dataset now has `r nrow(data.fil)` rows. 
+
+```{r}
+dummy.vars <- dummyVars(Life_Expectancy ~ log(GDP) + BMI + Child_Mortality + Continent + Mortality + Suicide_rate, data = data.fil)
+
+data.new <- predict(dummy.vars, data.fil)
+data.new <- data.fil %>% select(Life_Expectancy) %>% cbind(data.new)
+
+data.new <- data.new %>% select(-Continent.Europe, -`Continent.North America`, -Suicide_rate, -`Continent.South America`)
+
+model5 <- lm(Life_Expectancy ~ 1 + `log(GDP)` + Continent.Africa + Continent.Asia + Mortality + Child_Mortality, data = data.new)
+fit <- predict(model5, newdata = data.new)
+summary(model5)
+```
+
+We can now see that our model's *F*-statistic has further increased to 2257 and our $R^2$ value is now 98.79%. We will now do a quick residual plot analysis. 
+
+##### Residual Analysis
+
+```{r, fig3, fig.width=7.5, fig.height=6}
+autoplot(model5, label.vjust = 1.5) + theme_minimal()
+```
+
+
+The residuals and leverage points now seem to be in line with the assumptions of our multiple regression model. We will now analyze the histogram of residuals for our model.
+
+###### Histogram of Residuals
+
+Following is a histogram of residuals to check whether they're normally distributed or not.
+
+```{r}
+res <- resid(model5) %>% data.frame()
+names(res) <- c("res")
+
+res %>% 
+  ggplot() +
+  geom_histogram(aes(x = res), bins = 10) + 
+  labs(title = "Histogram of Residuals", x = "Residual Error", y = "Frequency") +
+  theme_minimal()
+```
+
+The histogram shows that the residuals are distributed between values -2 and 2. They almost follow a normal distribution which is in line with the assumptions made for a multiple regression model. 
+
+That being said, the 8th model now becomes our final model.
+
+## Conclusion
+
+After having created and tested 8 different models, our final model is:
+
+$$ 
+Life Expectancy = 67.32 + 0.6468*log(GDP) - 115.689*Child Mortality - 1.561*Africa -0.821*Asia -42.21*Mortality
+$$
+
+The final model represents that over 98% of movement in the *Life Expectancy* for a country can be predicted with whether the country is based in *Africa* or *Asia* and using a few basic statistics such as *Child Mortality Rate*, *Mortality Rate*, *GDP per Capita*, and the *BMI* of the population. 
+
+We can see that *Africa* is included as a significant variable because of the abysmal state of social affairs in that continent in general. Given that health conditions such as Ebola and deaths due to diseases are widespread in the area, the population in general does not tend to live as long as those in other countries. 
+
+The presence of *Asia* also is not surprising due to a similar reason. Since most of the countries in Asia are developing, the state of affairs are similar to those in Africa with the exception of Japan which has a high life expectancy (Japan was removed as it was an outlier in the data). 
+
+*Child Mortality Rate* may play a major influence as the number of children dying under the age of 5 may serve as a proxy for the state of the healthcare system in that country, which may go on the affect the health of the surviving population while growing up, contributing to lowering the expected life.
+
+*Mortality Rate* may also influence the life expectancy as this indicates the proportion of the population that dies between the ages of 15 and 60 years. The more people die within this age group, the lower the life expectancy would be as a certain percentage of the population has already died.
+
+*GDP per Capita* represents the general well-being of the population which may also reflect the development of the country. This is again important as the higher the GDP per Capita for a country, the more resources the population would have to access better healthcare, thereby improving the expected life for the population. 
+
+
